@@ -1,0 +1,123 @@
+version: "3.8"
+    
+services:
+
+  mariadb:
+    build: requirements/mariadb/
+    image: mariadb
+    container_name: mariadb
+    volumes:
+      - db_data:${MARIADB_ROOT}
+    env_file:
+      - .env
+    restart: always
+    networks: 
+      - docker-network
+
+  wordpress:
+    build: requirements/wordpress/
+    image: wordpress
+    container_name: wordpress
+    depends_on:
+      - mariadb
+    volumes:
+      - wp_data:${WORDPRESS_ROOT}
+    env_file:
+      - .env
+    restart: always
+    networks: 
+      - docker-network
+
+  nginx:
+    build: requirements/nginx/
+    image: nginx
+    container_name: nginx
+    depends_on:
+      - wordpress
+    volumes:
+      - wp_data:${WORDPRESS_ROOT}
+    ports:
+      - "443:443"
+    env_file:
+      - .env
+    restart: always
+    networks: 
+      - docker-network
+  
+  adminer:
+    image: adminer
+    container_name: inception-adminer
+    depends_on:
+      - mariadb
+    build: ./requirements/adminer/
+    restart: always
+    ports:
+      - "8000:80"
+    networks:
+      - docker-network
+
+  redis-cache:
+    image: redis-cache
+    container_name: inception-redis-cache
+    build: ./requirements/redis-cache/
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - docker-network
+
+  static_site:
+    image: static_site
+    container_name: inception-static_site
+    build: ./requirements/static_site/
+    restart: always
+    ports:
+      - "80:80"
+    networks:
+      - docker-network
+
+  ftp-server:
+    image: ftp-server
+    container_name: inception-ftp-server
+    build: ./requirements/ftp-server/
+    restart: always
+    volumes:
+      - wp_data:${WORDPRESS_ROOT}
+      - db_data:${MARIADB_ROOT}
+    env_file: .env
+    ports:
+      - "20-21:20-21"
+      - "21100-21110:21100-21110"
+    networks:
+      - docker-network
+   
+  stats:
+    image: docker-container-stats
+    container_name: 'stats'
+    build: requirements/docker-container-stats/
+    restart: always
+    ports:
+      - '8080:8080'
+    environment:
+      STATS_UPDATE_INTERVAL: 10
+    volumes:
+      - '/var/run/docker.sock:/var/run/docker.sock:ro'
+      - '/home/rcarmen/data/docker/storage/stats/db:/opt/docker-stats/db'
+    networks:
+      - docker-network
+
+volumes:
+  db_data: 
+    driver_opts:
+      type: none
+      o: bind
+      device: ${MARIADB_VOLUME_PATH}
+  wp_data: 
+    driver_opts:
+      type: none
+      o: bind
+      device: ${WORDPRESS_VOLUME_PATH}
+
+networks:
+  docker-network:
+    driver: bridge
